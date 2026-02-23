@@ -1,5 +1,8 @@
 #!/bin/bash
 
+rm -f /tmp/.X0-lock
+rm -rf /tmp/.X11-unix/X0
+
 # 1. Start the Virtual Display (Matching Aethel OS's 900x700 resolution)
 Xvfb :0 -screen 0 900x700x24 &
 sleep 2
