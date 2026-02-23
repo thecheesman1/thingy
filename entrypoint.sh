@@ -11,7 +11,7 @@ sleep 2
 x11vnc -display :0 -nopw -listen localhost -xkb -forever &
 
 # 3. Start noVNC (Translates VNC into a Webpage on port 8080)
-websockify --web=/usr/share/novnc/ 8080 localhost:5900 &
+websockify --web=/usr/share/novnc/ --heartbeat=30 8080 localhost:5900 &
 
 # 4. Start Aethel OS!
 echo "Booting Aethel OS..."
