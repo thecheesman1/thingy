@@ -151,6 +151,7 @@ class Application:
 class TerminalApp(Application):
     NAME = "Nexus Terminal"
     DEFAULT_SIZE = (450, 300)
+    MEMORY_FOOTPRINT = 12
 
     def __init__(self, os_kernel, window):
         super().__init__(os_kernel, window)
@@ -215,18 +216,19 @@ class TerminalApp(Application):
 class SysMonApp(Application):
     NAME = "System Monitor"
     DEFAULT_SIZE = (350, 200)
+    MEMORY_FOOTPRINT = 8
 
     def __init__(self, os_kernel, window):
         super().__init__(os_kernel, window)
         self.font = os_kernel.font_main
-        self.history = [0] * 50
+        self.history = [0.0] * 50
         self.tick = 0
 
     def update(self):
         self.tick += 1
         if self.tick % 5 == 0:
-            base_load = len(self.os.windows) * 10
-            usage = max(0, min(100, base_load + random.randint(-5, 15)))
+            # Grab the REAL frame load from the OS Kernel
+            usage = self.os.cpu_load
             self.history.pop(0)
             self.history.append(usage)
 
@@ -234,28 +236,42 @@ class SysMonApp(Application):
         super().draw(surface)
         w, h = surface.get_size()
         
-        surface.blit(self.font.render("CPU Usage History", True, THEME["accent"]), (10, 10))
+        surface.blit(self.font.render("Real-Time CPU Usage", True, THEME["accent"]), (10, 10))
 
-        graph_rect = pygame.Rect(10, 40, w - 20, 100)
+        # Draw Graph Background
+        graph_rect = pygame.Rect(10, 35, w - 20, 100)
         pygame.draw.rect(surface, (10, 10, 15), graph_rect)
         pygame.draw.rect(surface, THEME["title_bar"], graph_rect, 2)
 
+        # Dynamic Scaling: scale the graph so small loads are still visible,
+        # but big spikes don't go out of bounds.
+        max_val = max(5.0, max(self.history)) 
+
         points = []
-        step_x = graph_rect.width / len(self.history)
+        step_x = graph_rect.width / max(1, len(self.history) - 1)
         for i, val in enumerate(self.history):
             x = graph_rect.left + (i * step_x)
-            y = graph_rect.bottom - (val / 100.0 * graph_rect.height)
+            # Calculate Y based on our dynamic max_val
+            y = graph_rect.bottom - (val / max_val * graph_rect.height)
             points.append((x, y))
         
         if len(points) > 1:
             pygame.draw.lines(surface, THEME["accent"], False, points, 2)
 
-        stat_text = self.font.render(f"Current Load: {self.history[-1]}% | Tasks: {len(self.os.windows)}", True, THEME["text_main"])
-        surface.blit(stat_text, (10, 150))
+        # Bottom Stats Text
+        current_load = self.history[-1]
+        ram_usage = self.os.get_ram_usage()
+        
+        stat_text = self.font.render(f"Load: {current_load:.1f}% | RAM: {ram_usage}/{self.os.max_ram} MB", True, THEME["text_main"])
+        tasks_text = self.font.render(f"Active Tasks: {len(self.os.windows)}", True, THEME["text_main"])
+        
+        surface.blit(stat_text, (10, 145))
+        surface.blit(tasks_text, (10, 165))
 
 class VmApp(Application):
     NAME = "Nexus VM Emulator"
     DEFAULT_SIZE = (600, 360)
+    MEMORY_FOOTPRINT = 64
 
     # A custom Assembly Program that calculates physics to bounce a pixel around the screen!
     BOUNCING_PIXEL_ROM = [
@@ -396,6 +412,8 @@ class AethelOS:
         # State
         self.state = "BOOT"
         self.boot_timer = 0
+        self.cpu_load = 0.0
+        self.max_ram = 512
         
         # Window Management
         self.windows = []
@@ -409,6 +427,13 @@ class AethelOS:
             {"name": "Sys Monitor", "app": SysMonApp, "rect": pygame.Rect(20, 100, 60, 60)},
             {"name": "Nexus VM", "app": VmApp, "rect": pygame.Rect(20, 180, 60, 60)}
         ]
+
+    def get_ram_usage(self):
+        """Calculates total RAM used by OS and Apps."""
+        usage = 32 # Base OS overhead
+        for win in self.windows:
+            usage += getattr(win.app, 'MEMORY_FOOTPRINT', 10)
+        return usage
 
     def launch_app(self, app_class):
         offset = len(self.windows) * 25
@@ -545,9 +570,24 @@ class AethelOS:
 
     def run(self):
         while True:
+            # 1. Mark the start time of the frame
+            start_time = time.perf_counter()
+            
             self.handle_events()
             self.update()
             self.draw()
+            
+            # 2. Mark the end time of computation (before we sleep/tick)
+            work_time = time.perf_counter() - start_time
+            
+            # 3. Calculate load: 60 FPS means we have 0.01666 seconds per frame.
+            # How much of that time did we spend doing actual work?
+            target_frame_time = 1.0 / 60.0 
+            load = (work_time / target_frame_time) * 100.0
+            
+            # Smooth it out slightly so the graph isn't complete static noise
+            self.cpu_load = (self.cpu_load * 0.8) + (min(100.0, load) * 0.2)
+            
             self.clock.tick(60)
 
 if __name__ == "__main__":
