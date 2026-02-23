@@ -24,8 +24,8 @@ THEME = {
     "code_keyword": (198, 120, 221)   # Purple for code highlights
 }
 
-SCREEN_WIDTH = 1000
-SCREEN_HEIGHT = 750
+SCREEN_WIDTH = 900
+SCREEN_HEIGHT = 700
 TASKBAR_HEIGHT = 40
 
 # ==========================================
