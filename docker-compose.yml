@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  aethel-os:
+    build: .
+    container_name: aethel_nexus
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'      # The Magic Potato PC limit
+          memory: 256M     # Artificial RAM limit
+    restart: unless-stopped
